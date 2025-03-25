@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, abort
 from .shemas import post_schema, get_schema
 from db import posts_db
+from marshmallow import ValidationError
 
 posts_bp = Blueprint('posts', __name__, url_prefix='/posts')
 
@@ -9,16 +10,17 @@ def get_posts():
     '''
     Route to get existing posts
     '''
+
     data = request.get_json(silent=True)
 
     try: 
         get_schema.load(data or {})
-    except Exception as err: 
-        return jsonify({ "message": err.messages })
+    except ValidationError as err: 
+        return jsonify({ "message": err.messages }), 400
 
     posts = list(posts_db.find({}, { "_id": 0 }))
 
-    return jsonify(posts)
+    return jsonify(posts), 200
 
 
 @posts_bp.route('', methods=['POST'])
@@ -31,21 +33,18 @@ def create_posts():
 
     try: 
         post_schema.load(data)
-    except Exception as err: 
+    except ValidationError as err: 
         return jsonify({ "errors": err.messages }), 400
-
-    if not data or 'title' not in data or 'text' not in data: 
-        abort(400)
 
     new_post = { 
         'title': data['title'], 
         'text': data['text'],
     }
 
-    posts_db.insert_one(new_post)
+    result = posts_db.insert_one(new_post)
 
     # Cannot turn ObjectId into JSON
-    new_post['_id'] = str(new_post['_id'])
+    new_post['_id'] = str(result['_id'])
 
     return jsonify(new_post), 201
 
